@@ -1,0 +1,28 @@
+# OS
+.DS_Store
+Thumbs.db
+*~
+*.swp
+*.swo
+*.bak
+
+# Editor
+.vscode/
+.idea/
+*.sublime-*
+
+# Logs
+*.log
+logs/
+
+# Temp
+tmp/
+temp/
+*.tmp
+
+# User-specific config overrides
+config/local/
+
+# Build artifacts
+dist/
+build/

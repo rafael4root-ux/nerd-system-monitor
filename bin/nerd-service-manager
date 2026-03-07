@@ -1,0 +1,235 @@
+#!/bin/bash
+# ═══════════════════════════════════════════════
+# NERD STATION - Systemd Service Manager
+# ═══════════════════════════════════════════════
+
+THEME="$HOME/.config/rofi/nerd-theme.rasi"
+
+notify() {
+    notify-send -i dialog-information "⚙ Service Manager" "$1" -t 3000
+}
+
+# Service categories for quick access
+FAVORITES=(
+    "docker"
+    "nginx"
+    "apache2"
+    "mysql"
+    "mariadb"
+    "postgresql"
+    "redis-server"
+    "mongodb"
+    "rabbitmq-server"
+    "ssh"
+    "sshd"
+    "ufw"
+    "bluetooth"
+    "NetworkManager"
+    "cups"
+    "libvirtd"
+    "vboxdrv"
+)
+
+while true; do
+    # Build service list
+    VIEW=$(echo -e "━━━ VIEWS ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📋 All Running Services
+📋 All Failed Services  
+📋 All Enabled Services
+📋 Favorite Services
+🔍 Search Service
+━━━ QUICK ACTIONS ━━━━━━━━━━━━━━━━━━━━━
+🔄 Reload systemd daemon
+📊 System boot time analysis" | rofi -dmenu \
+        -theme "$THEME" \
+        -p "⚙ SERVICES" \
+        -mesg "Systemd Service Manager" \
+        -i)
+
+    [[ -z "$VIEW" ]] && exit 0
+
+    case "$VIEW" in
+        *"All Running"*)
+            SERVICES=$(systemctl list-units --type=service --state=running --no-pager --no-legend 2>/dev/null | \
+                awk '{printf "🟢 %s\n", $1}' | sed 's/.service//')
+            PROMPT="RUNNING"
+            ;;
+        *"All Failed"*)
+            SERVICES=$(systemctl list-units --type=service --state=failed --no-pager --no-legend 2>/dev/null | \
+                awk '{printf "🔴 %s\n", $1}' | sed 's/.service//')
+            if [[ -z "$SERVICES" ]]; then
+                notify "✓ No failed services!"
+                continue
+            fi
+            PROMPT="FAILED"
+            ;;
+        *"All Enabled"*)
+            SERVICES=$(systemctl list-unit-files --type=service --state=enabled --no-pager --no-legend 2>/dev/null | \
+                awk '{printf "⚡ %s\n", $1}' | sed 's/.service//')
+            PROMPT="ENABLED"
+            ;;
+        *"Favorite"*)
+            SERVICES=""
+            for svc in "${FAVORITES[@]}"; do
+                STATUS=$(systemctl is-active "$svc" 2>/dev/null)
+                ENABLED=$(systemctl is-enabled "$svc" 2>/dev/null)
+                if [[ "$STATUS" == "active" ]]; then
+                    icon="🟢"
+                elif [[ "$STATUS" == "inactive" ]]; then
+                    icon="⚪"
+                elif [[ "$STATUS" == "failed" ]]; then
+                    icon="🔴"
+                else
+                    continue  # Service doesn't exist
+                fi
+                SERVICES+="$icon $svc [$ENABLED]"$'\n'
+            done
+            SERVICES=$(echo "$SERVICES" | sed '/^$/d')
+            if [[ -z "$SERVICES" ]]; then
+                notify "No favorite services found on this system"
+                continue
+            fi
+            PROMPT="FAVORITES"
+            ;;
+        *"Search"*)
+            QUERY=$(echo "" | rofi -dmenu \
+                -theme "$THEME" \
+                -p "🔍 SEARCH" \
+                -mesg "Enter service name to search")
+            [[ -z "$QUERY" ]] && continue
+            SERVICES=$(systemctl list-unit-files --type=service --no-pager --no-legend 2>/dev/null | \
+                grep -i "$QUERY" | awk '{
+                    if ($2 == "enabled") icon="🟢"
+                    else if ($2 == "disabled") icon="⚪"
+                    else if ($2 == "masked") icon="🚫"
+                    else icon="❓"
+                    gsub(/.service/, "", $1)
+                    printf "%s %s [%s]\n", icon, $1, $2
+                }')
+            if [[ -z "$SERVICES" ]]; then
+                notify "No services matching '$QUERY'"
+                continue
+            fi
+            PROMPT="SEARCH"
+            ;;
+        *"Reload systemd"*)
+            pkexec systemctl daemon-reload && notify "🔄 Systemd daemon reloaded"
+            continue
+            ;;
+        *"boot time"*)
+            ANALYSIS=$(systemd-analyze blame --no-pager 2>/dev/null | head -20)
+            BOOT=$(systemd-analyze 2>/dev/null | head -1)
+            echo -e "$BOOT\n\n$ANALYSIS" | rofi -dmenu \
+                -theme "$THEME" \
+                -p "📊 BOOT" \
+                -mesg "System boot time analysis"
+            continue
+            ;;
+        *)
+            continue
+            ;;
+    esac
+
+    # Show services and let user pick one
+    SELECTED=$(echo "$SERVICES" | rofi -dmenu \
+        -theme "$THEME" \
+        -p "⚙ $PROMPT" \
+        -mesg "Select a service to manage" \
+        -i)
+
+    [[ -z "$SELECTED" ]] && continue
+
+    # Extract service name (remove icon and status)
+    SVC_NAME=$(echo "$SELECTED" | awk '{print $2}' | sed 's/\[.*\]//')
+
+    # Get detailed status
+    SVC_STATUS=$(systemctl is-active "$SVC_NAME" 2>/dev/null)
+    SVC_ENABLED=$(systemctl is-enabled "$SVC_NAME" 2>/dev/null)
+    SVC_DESC=$(systemctl show "$SVC_NAME" --property=Description --value 2>/dev/null)
+    SVC_MAINPID=$(systemctl show "$SVC_NAME" --property=MainPID --value 2>/dev/null)
+    SVC_MEMORY=$(systemctl show "$SVC_NAME" --property=MemoryCurrent --value 2>/dev/null)
+
+    # Format memory
+    if [[ "$SVC_MEMORY" =~ ^[0-9]+$ ]] && [[ "$SVC_MEMORY" -gt 0 ]]; then
+        SVC_MEM_MB=$(echo "scale=1; $SVC_MEMORY / 1048576" | bc)
+        MEM_STR="${SVC_MEM_MB}MB"
+    else
+        MEM_STR="N/A"
+    fi
+
+    # Build actions based on status
+    if [[ "$SVC_STATUS" == "active" ]]; then
+        ACTIONS="⏹  Stop
+🔄 Restart
+♻  Reload (config)
+📋 View Logs
+📊 Status details"
+    else
+        ACTIONS="▶  Start
+📋 View Logs
+📊 Status details"
+    fi
+
+    # Add enable/disable
+    if [[ "$SVC_ENABLED" == "enabled" ]]; then
+        ACTIONS+="\n🚫 Disable (boot)"
+    elif [[ "$SVC_ENABLED" == "disabled" ]]; then
+        ACTIONS+="\n⚡ Enable (boot)"
+    fi
+
+    if [[ "$SVC_ENABLED" != "masked" ]]; then
+        ACTIONS+="\n🔒 Mask (prevent start)"
+    else
+        ACTIONS+="\n🔓 Unmask"
+    fi
+
+    ACTION=$(echo -e "$ACTIONS" | rofi -dmenu \
+        -theme "$THEME" \
+        -p "⚙ $SVC_NAME" \
+        -mesg "Status: $SVC_STATUS | Boot: $SVC_ENABLED | PID: $SVC_MAINPID | Mem: $MEM_STR
+Desc: $SVC_DESC")
+
+    [[ -z "$ACTION" ]] && continue
+
+    case "$ACTION" in
+        *"Stop"*)
+            pkexec systemctl stop "$SVC_NAME" && notify "⏹ Stopped $SVC_NAME"
+            ;;
+        *"Start"*)
+            pkexec systemctl start "$SVC_NAME" && notify "▶ Started $SVC_NAME"
+            ;;
+        *"Restart"*)
+            pkexec systemctl restart "$SVC_NAME" && notify "🔄 Restarted $SVC_NAME"
+            ;;
+        *"Reload"*)
+            pkexec systemctl reload "$SVC_NAME" && notify "♻ Reloaded $SVC_NAME"
+            ;;
+        *"View Logs"*)
+            LOGS=$(journalctl -u "$SVC_NAME" --no-pager -n 50 2>/dev/null)
+            echo "$LOGS" | rofi -dmenu \
+                -theme "$THEME" \
+                -p "📋 LOGS" \
+                -mesg "$SVC_NAME - last 50 entries" \
+                -i
+            ;;
+        *"Status"*)
+            STATUS_OUT=$(systemctl status "$SVC_NAME" --no-pager 2>/dev/null)
+            echo "$STATUS_OUT" | rofi -dmenu \
+                -theme "$THEME" \
+                -p "📊 STATUS" \
+                -mesg "$SVC_NAME"
+            ;;
+        *"Disable"*)
+            pkexec systemctl disable "$SVC_NAME" && notify "🚫 Disabled $SVC_NAME"
+            ;;
+        *"Enable"*)
+            pkexec systemctl enable "$SVC_NAME" && notify "⚡ Enabled $SVC_NAME"
+            ;;
+        *"Mask"*)
+            pkexec systemctl mask "$SVC_NAME" && notify "🔒 Masked $SVC_NAME"
+            ;;
+        *"Unmask"*)
+            pkexec systemctl unmask "$SVC_NAME" && notify "🔓 Unmasked $SVC_NAME"
+            ;;
+    esac
+done

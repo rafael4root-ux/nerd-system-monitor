@@ -1,0 +1,89 @@
+* {
+    bg:           #0a0a0aee;
+    bg-alt:       #1a1a2eee;
+    fg:           #00D9FF;
+    fg-alt:       #FFD700;
+    accent:       #FF003C;
+    green:        #7CFC00;
+    border-color: #FF003C;
+    
+    background-color: @bg;
+    text-color:       @fg;
+    font:             "JetBrains Mono 11";
+}
+
+window {
+    width:            500px;
+    border:           2px;
+    border-color:     @accent;
+    border-radius:    8px;
+    padding:          0;
+}
+
+mainbox {
+    padding:  10px;
+    children: [inputbar, message, listview];
+}
+
+inputbar {
+    padding:          8px;
+    background-color: @bg-alt;
+    border-radius:    4px;
+    children:         [prompt, entry];
+    spacing:          8px;
+}
+
+prompt {
+    text-color: @fg-alt;
+    font:       "JetBrains Mono Bold 11";
+}
+
+entry {
+    text-color:  @fg;
+    placeholder: "type to filter...";
+    placeholder-color: #555555;
+}
+
+message {
+    padding:    6px 10px;
+    text-color: @green;
+}
+
+textbox {
+    text-color: @green;
+}
+
+listview {
+    lines:     15;
+    padding:   8px 0 0 0;
+    scrollbar: false;
+    spacing:   2px;
+}
+
+element {
+    padding:       6px 10px;
+    border-radius: 3px;
+}
+
+element normal.normal {
+    background-color: transparent;
+    text-color:       @fg;
+}
+
+element alternate.normal {
+    background-color: transparent;
+    text-color:       @fg;
+}
+
+element selected.normal {
+    background-color: @accent;
+    text-color:       #ffffff;
+}
+
+element-text {
+    text-color: inherit;
+}
+
+element-icon {
+    size: 0;
+}

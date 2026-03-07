@@ -1,0 +1,228 @@
+#!/bin/bash
+# ═══════════════════════════════════════════════
+# NERD STATION - Docker Manager
+# ═══════════════════════════════════════════════
+
+THEME="$HOME/.config/rofi/nerd-theme.rasi"
+
+notify() {
+    notify-send -i dialog-information "🐳 Docker Manager" "$1" -t 3000
+}
+
+# Check Docker is running
+if ! docker info &>/dev/null; then
+    ACTION=$(echo -e "▶ Start Docker service\n✗ Cancel" | rofi -dmenu \
+        -theme "$THEME" \
+        -p "🐳 DOCKER" \
+        -mesg "Docker is not running!")
+    
+    if [[ "$ACTION" == *"Start"* ]]; then
+        pkexec systemctl start docker
+        notify "▶ Docker service started"
+        sleep 2
+    else
+        exit 0
+    fi
+fi
+
+# Main loop
+while true; do
+    # Build container list with status
+    CONTAINERS=$(docker ps -a --format '{{.Names}}|{{.Status}}|{{.Image}}|{{.Ports}}' | while IFS='|' read name status image ports; do
+        if [[ "$status" == Up* ]]; then
+            icon="🟢"
+        else
+            icon="🔴"
+        fi
+        # Truncate long fields
+        printf "%s %-25s %-20s %s\n" "$icon" "${name:0:25}" "${status:0:20}" "${image:0:30}"
+    done)
+
+    if [[ -z "$CONTAINERS" ]]; then
+        CONTAINERS="(no containers found)"
+    fi
+
+    # Add action options at top
+    MENU=$(echo -e "━━━ ACTIONS ━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📊 Docker Stats (live)
+📋 Docker Compose - Up
+📋 Docker Compose - Down
+🔄 Restart All Running
+⏹  Stop All Running
+🗑  Prune (clean unused)
+━━━ CONTAINERS ━━━━━━━━━━━━━━━━━━━━━━━━
+$CONTAINERS")
+
+    SELECTED=$(echo "$MENU" | rofi -dmenu \
+        -theme "$THEME" \
+        -p "🐳 DOCKER" \
+        -mesg "Running: $(docker ps -q | wc -l) | Total: $(docker ps -aq | wc -l) | Images: $(docker images -q | wc -l)" \
+        -i)
+
+    [[ -z "$SELECTED" ]] && exit 0
+
+    # Handle top-level actions
+    case "$SELECTED" in
+        *"Docker Stats"*)
+            # Open btop-like docker stats in a terminal
+            if command -v gnome-terminal &>/dev/null; then
+                gnome-terminal -- bash -c "docker stats; read -p 'Press Enter to close...'"
+            elif command -v xterm &>/dev/null; then
+                xterm -e "docker stats"
+            fi
+            continue
+            ;;
+        *"Compose - Up"*)
+            DIR=$(find "$HOME" -maxdepth 4 -name "docker-compose.yml" -o -name "docker-compose.yaml" -o -name "compose.yml" -o -name "compose.yaml" 2>/dev/null | head -20)
+            if [[ -n "$DIR" ]]; then
+                CHOSEN=$(echo "$DIR" | rofi -dmenu \
+                    -theme "$THEME" \
+                    -p "📋 COMPOSE UP" \
+                    -mesg "Select compose file")
+                if [[ -n "$CHOSEN" ]]; then
+                    COMPOSE_DIR=$(dirname "$CHOSEN")
+                    (cd "$COMPOSE_DIR" && docker compose up -d 2>&1)
+                    notify "▶ Compose UP in $COMPOSE_DIR"
+                fi
+            else
+                notify "No docker-compose files found"
+            fi
+            continue
+            ;;
+        *"Compose - Down"*)
+            DIR=$(find "$HOME" -maxdepth 4 -name "docker-compose.yml" -o -name "docker-compose.yaml" -o -name "compose.yml" -o -name "compose.yaml" 2>/dev/null | head -20)
+            if [[ -n "$DIR" ]]; then
+                CHOSEN=$(echo "$DIR" | rofi -dmenu \
+                    -theme "$THEME" \
+                    -p "📋 COMPOSE DOWN" \
+                    -mesg "Select compose file")
+                if [[ -n "$CHOSEN" ]]; then
+                    COMPOSE_DIR=$(dirname "$CHOSEN")
+                    (cd "$COMPOSE_DIR" && docker compose down 2>&1)
+                    notify "⏹ Compose DOWN in $COMPOSE_DIR"
+                fi
+            fi
+            continue
+            ;;
+        *"Restart All"*)
+            CONFIRM=$(echo -e "✓ YES\n✗ NO" | rofi -dmenu -theme "$THEME" -p "⚠ CONFIRM" -mesg "Restart all running containers?")
+            if [[ "$CONFIRM" == *"YES"* ]]; then
+                docker restart $(docker ps -q) 2>/dev/null
+                notify "🔄 All containers restarted"
+            fi
+            continue
+            ;;
+        *"Stop All"*)
+            CONFIRM=$(echo -e "✓ YES\n✗ NO" | rofi -dmenu -theme "$THEME" -p "⚠ CONFIRM" -mesg "Stop ALL running containers?")
+            if [[ "$CONFIRM" == *"YES"* ]]; then
+                docker stop $(docker ps -q) 2>/dev/null
+                notify "⏹ All containers stopped"
+            fi
+            continue
+            ;;
+        *"Prune"*)
+            CONFIRM=$(echo -e "✓ YES\n✗ NO" | rofi -dmenu -theme "$THEME" -p "⚠ CONFIRM" -mesg "Remove all stopped containers, unused networks, dangling images?")
+            if [[ "$CONFIRM" == *"YES"* ]]; then
+                RESULT=$(docker system prune -f 2>&1 | tail -2)
+                notify "🗑 Prune complete: $RESULT"
+            fi
+            continue
+            ;;
+        *"━━━"*)
+            continue
+            ;;
+    esac
+
+    # Handle individual container selection
+    CONTAINER_NAME=$(echo "$SELECTED" | awk '{print $2}')
+    
+    if [[ -z "$CONTAINER_NAME" ]] || [[ "$CONTAINER_NAME" == "(no" ]]; then
+        continue
+    fi
+
+    # Get container status
+    C_STATUS=$(docker inspect --format '{{.State.Status}}' "$CONTAINER_NAME" 2>/dev/null)
+    C_IMAGE=$(docker inspect --format '{{.Config.Image}}' "$CONTAINER_NAME" 2>/dev/null)
+    C_PORTS=$(docker port "$CONTAINER_NAME" 2>/dev/null | tr '\n' ' ')
+    C_IP=$(docker inspect --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$CONTAINER_NAME" 2>/dev/null)
+
+    # Build container actions based on status
+    if [[ "$C_STATUS" == "running" ]]; then
+        ACTIONS="⏹  Stop
+🔄 Restart
+⏸  Pause
+📋 Logs (tail 50)
+🖥  Shell (bash)
+📊 Stats
+🔍 Inspect"
+    elif [[ "$C_STATUS" == "paused" ]]; then
+        ACTIONS="▶  Unpause
+⏹  Stop
+📋 Logs (tail 50)
+🔍 Inspect"
+    else
+        ACTIONS="▶  Start
+🗑  Remove
+📋 Logs (tail 50)
+🔍 Inspect"
+    fi
+
+    ACTION=$(echo "$ACTIONS" | rofi -dmenu \
+        -theme "$THEME" \
+        -p "🐳 $CONTAINER_NAME" \
+        -mesg "Status: $C_STATUS | Image: $C_IMAGE | IP: $C_IP | Ports: $C_PORTS")
+
+    [[ -z "$ACTION" ]] && continue
+
+    case "$ACTION" in
+        *"Stop"*)
+            docker stop "$CONTAINER_NAME" && notify "⏹ Stopped $CONTAINER_NAME"
+            ;;
+        *"Start"*)
+            docker start "$CONTAINER_NAME" && notify "▶ Started $CONTAINER_NAME"
+            ;;
+        *"Restart"*)
+            docker restart "$CONTAINER_NAME" && notify "🔄 Restarted $CONTAINER_NAME"
+            ;;
+        *"Pause"*)
+            docker pause "$CONTAINER_NAME" && notify "⏸ Paused $CONTAINER_NAME"
+            ;;
+        *"Unpause"*)
+            docker unpause "$CONTAINER_NAME" && notify "▶ Unpaused $CONTAINER_NAME"
+            ;;
+        *"Logs"*)
+            LOGS=$(docker logs --tail 50 "$CONTAINER_NAME" 2>&1)
+            echo "$LOGS" | rofi -dmenu \
+                -theme "$THEME" \
+                -p "📋 LOGS" \
+                -mesg "$CONTAINER_NAME - last 50 lines" \
+                -i
+            ;;
+        *"Shell"*)
+            if command -v gnome-terminal &>/dev/null; then
+                gnome-terminal -- docker exec -it "$CONTAINER_NAME" bash 2>/dev/null || \
+                gnome-terminal -- docker exec -it "$CONTAINER_NAME" sh
+            elif command -v xterm &>/dev/null; then
+                xterm -e "docker exec -it $CONTAINER_NAME bash || docker exec -it $CONTAINER_NAME sh"
+            fi
+            ;;
+        *"Stats"*)
+            if command -v gnome-terminal &>/dev/null; then
+                gnome-terminal -- bash -c "docker stats $CONTAINER_NAME; read -p 'Press Enter...'"
+            fi
+            ;;
+        *"Inspect"*)
+            INFO=$(docker inspect "$CONTAINER_NAME" 2>&1 | python3 -m json.tool 2>/dev/null | head -60)
+            echo "$INFO" | rofi -dmenu \
+                -theme "$THEME" \
+                -p "🔍 INSPECT" \
+                -mesg "$CONTAINER_NAME"
+            ;;
+        *"Remove"*)
+            CONFIRM=$(echo -e "✓ YES\n✗ NO" | rofi -dmenu -theme "$THEME" -p "⚠ CONFIRM" -mesg "Remove container $CONTAINER_NAME?")
+            if [[ "$CONFIRM" == *"YES"* ]]; then
+                docker rm "$CONTAINER_NAME" && notify "🗑 Removed $CONTAINER_NAME"
+            fi
+            ;;
+    esac
+done

@@ -1,0 +1,142 @@
+#!/bin/bash
+# ═══════════════════════════════════════════════
+# NERD STATION - Unified Control Panel
+# ═══════════════════════════════════════════════
+# Launch with: Super+N or nerd-station
+# ═══════════════════════════════════════════════
+
+THEME="$HOME/.config/rofi/nerd-theme.rasi"
+SCRIPTS_DIR="$HOME/.local/bin"
+
+# Quick system stats for header
+CPU=$(grep -o '[0-9]*\.[0-9]*' /proc/loadavg | head -1)
+MEM=$(free -h | awk '/Mem:/ {printf "%s/%s", $3, $2}')
+DOCKER_COUNT=$(docker ps -q 2>/dev/null | wc -l)
+SERVICES_RUNNING=$(systemctl list-units --type=service --state=running --no-legend 2>/dev/null | wc -l)
+
+SELECTED=$(echo -e "\
+⚡ Process Manager        Kill/signal processes
+🐳 Docker Manager         Start/stop/restart containers  
+⚙  Service Manager        Systemd services on/off
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🖥  btop                   Interactive system monitor
+📊 glances                 Web dashboard monitor
+📋 nmon                    Compact system monitor
+🌐 Network Ports           Show listening ports
+🔌 Active Connections       Show established connections
+📡 WiFi Networks           Scan WiFi networks
+🧹 System Cleanup          APT clean + logs clean
+🔋 Battery Info            Detailed battery status
+🌡  Sensors                 Temperature sensors
+💾 Disk Usage              Largest directories" | rofi -dmenu \
+    -theme "$THEME" \
+    -p "⚡ NERD STATION" \
+    -mesg "CPU: $CPU | RAM: $MEM | Docker: $DOCKER_COUNT | Services: $SERVICES_RUNNING" \
+    -i)
+
+[[ -z "$SELECTED" ]] && exit 0
+
+open_terminal() {
+    if command -v gnome-terminal &>/dev/null; then
+        gnome-terminal -- bash -c "$1; echo ''; echo 'Press Enter to close...'; read"
+    elif command -v xterm &>/dev/null; then
+        xterm -e "$1; read"
+    fi
+}
+
+case "$SELECTED" in
+    *"Process Manager"*)
+        "$SCRIPTS_DIR/nerd-process-manager"
+        ;;
+    *"Docker Manager"*)
+        "$SCRIPTS_DIR/nerd-docker-manager"
+        ;;
+    *"Service Manager"*)
+        "$SCRIPTS_DIR/nerd-service-manager"
+        ;;
+    *"btop"*)
+        open_terminal "btop"
+        ;;
+    *"glances"*)
+        open_terminal "glances"
+        ;;
+    *"nmon"*)
+        open_terminal "nmon"
+        ;;
+    *"Network Ports"*)
+        PORTS=$(ss -tlnp 2>/dev/null | awk 'NR>1 {
+            split($4,a,":"); port=a[length(a)]; 
+            split($6,p,"\""); proc=p[2]; 
+            if(proc=="") proc="???"; 
+            printf "%-8s %-20s %s\n", port, proc, $4
+        }' | sort -t' ' -k1 -n | uniq)
+        echo "$PORTS" | rofi -dmenu \
+            -theme "$THEME" \
+            -p "🌐 PORTS" \
+            -mesg "PORT     PROCESS              ADDRESS" \
+            -i
+        ;;
+    *"Active Connections"*)
+        CONNS=$(ss -tnp state established 2>/dev/null | awk 'NR>1 {
+            split($4,l,":"); split($5,r,":"); 
+            split($6,p,"\""); proc=p[2]; 
+            if(proc=="") proc="???"; 
+            printf "%-15s %-6s → %-20s %-6s\n", proc, l[length(l)], r[1], r[length(r)]
+        }' | sort)
+        COUNT=$(echo "$CONNS" | wc -l)
+        echo "$CONNS" | rofi -dmenu \
+            -theme "$THEME" \
+            -p "🔌 CONNECTIONS" \
+            -mesg "Established: $COUNT | PROCESS  LOCAL → REMOTE  PORT" \
+            -i
+        ;;
+    *"WiFi"*)
+        notify-send "📡 Scanning WiFi..." -t 2000
+        WIFI=$(nmcli -t -f SSID,SIGNAL,SECURITY device wifi list 2>/dev/null | sort -t: -k2 -rn | awk -F: '{
+            bars = int($2/20)
+            signal = ""
+            for(i=0;i<bars;i++) signal = signal "█"
+            for(i=bars;i<5;i++) signal = signal "░"
+            printf "%-25s %s %3s%% %s\n", $1, signal, $2, $3
+        }')
+        echo "$WIFI" | rofi -dmenu \
+            -theme "$THEME" \
+            -p "📡 WIFI" \
+            -mesg "Available networks" \
+            -i
+        ;;
+    *"System Cleanup"*)
+        CONFIRM=$(echo -e "✓ YES - Run cleanup\n✗ NO - Cancel" | rofi -dmenu \
+            -theme "$THEME" \
+            -p "🧹 CLEANUP" \
+            -mesg "APT autoremove + clean + journal vacuum")
+        if [[ "$CONFIRM" == *"YES"* ]]; then
+            pkexec bash -c "apt autoremove -y && apt clean && journalctl --vacuum-time=7d" 2>&1
+            notify-send "🧹 System Cleanup" "Complete!" -t 3000
+        fi
+        ;;
+    *"Battery"*)
+        BAT_INFO=$(upower -i /org/freedesktop/UPower/devices/battery_BAT0 2>/dev/null)
+        echo "$BAT_INFO" | rofi -dmenu \
+            -theme "$THEME" \
+            -p "🔋 BATTERY" \
+            -mesg "Detailed battery information" \
+            -i
+        ;;
+    *"Sensors"*)
+        TEMPS=$(sensors 2>/dev/null)
+        echo "$TEMPS" | rofi -dmenu \
+            -theme "$THEME" \
+            -p "🌡 SENSORS" \
+            -mesg "Temperature sensors" \
+            -i
+        ;;
+    *"Disk Usage"*)
+        DISK=$(du -h --max-depth=1 "$HOME" 2>/dev/null | sort -rh | head -20)
+        echo "$DISK" | rofi -dmenu \
+            -theme "$THEME" \
+            -p "💾 DISK" \
+            -mesg "Largest directories in \$HOME" \
+            -i
+        ;;
+esac

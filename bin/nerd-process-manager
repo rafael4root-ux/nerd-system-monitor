@@ -1,0 +1,92 @@
+#!/bin/bash
+# ═══════════════════════════════════════════════
+# NERD STATION - Process Killer
+# ═══════════════════════════════════════════════
+
+THEME="$HOME/.config/rofi/nerd-theme.rasi"
+
+notify() {
+    notify-send -i dialog-information "⚡ Process Manager" "$1" -t 3000
+}
+
+# Get process list sorted by CPU usage
+get_processes() {
+    ps aux --sort=-%cpu | awk 'NR>1 {
+        printf "%-8s %-6s %-5s %-5s %s\n", $1, $2, $3, $4, $11
+    }' | head -40
+}
+
+# Main menu
+HEADER="USER      PID    CPU%  MEM%  COMMAND"
+
+while true; do
+    SELECTED=$(get_processes | rofi -dmenu \
+        -theme "$THEME" \
+        -p "⚡ KILL PROCESS" \
+        -mesg "$HEADER" \
+        -i \
+        -kb-custom-1 "Alt+k" \
+        -kb-custom-2 "Alt+9" \
+        -kb-custom-3 "Alt+f")
+
+    EXIT_CODE=$?
+
+    # ESC pressed
+    [[ $EXIT_CODE -eq 1 ]] && exit 0
+    [[ -z "$SELECTED" ]] && exit 0
+
+    PID=$(echo "$SELECTED" | awk '{print $2}')
+    PNAME=$(echo "$SELECTED" | awk '{print $5}')
+
+    if [[ $EXIT_CODE -eq 10 ]]; then
+        # Alt+k = SIGKILL (-9)
+        SIGNAL="-9"
+        SIGNAME="SIGKILL"
+    elif [[ $EXIT_CODE -eq 11 ]]; then
+        # Alt+9 = SIGKILL (-9)
+        SIGNAL="-9"
+        SIGNAME="SIGKILL"
+    elif [[ $EXIT_CODE -eq 12 ]]; then
+        # Alt+f = force kill tree
+        pkill -9 -P "$PID" 2>/dev/null
+        kill -9 "$PID" 2>/dev/null
+        notify "☠ Force killed $PNAME (PID: $PID) and children"
+        continue
+    else
+        # Default: ask signal type
+        SIGNAL_CHOICE=$(echo -e "SIGTERM (graceful)\nSIGKILL (force)\nSIGSTOP (pause)\nSIGCONT (resume)\nSIGHUP (reload)" | rofi -dmenu \
+            -theme "$THEME" \
+            -p "⚡ SIGNAL" \
+            -mesg "Target: $PNAME (PID: $PID)")
+
+        [[ -z "$SIGNAL_CHOICE" ]] && continue
+
+        case "$SIGNAL_CHOICE" in
+            *SIGTERM*) SIGNAL="-15"; SIGNAME="SIGTERM" ;;
+            *SIGKILL*) SIGNAL="-9"; SIGNAME="SIGKILL" ;;
+            *SIGSTOP*) SIGNAL="-STOP"; SIGNAME="SIGSTOP" ;;
+            *SIGCONT*) SIGNAL="-CONT"; SIGNAME="SIGCONT" ;;
+            *SIGHUP*)  SIGNAL="-1"; SIGNAME="SIGHUP" ;;
+            *) continue ;;
+        esac
+    fi
+
+    # Confirm
+    CONFIRM=$(echo -e "✓ YES - Send $SIGNAME to $PNAME ($PID)\n✗ NO - Cancel" | rofi -dmenu \
+        -theme "$THEME" \
+        -p "⚠ CONFIRM" \
+        -mesg "Send $SIGNAME to $PNAME (PID: $PID)?")
+
+    if [[ "$CONFIRM" == *"YES"* ]]; then
+        if kill $SIGNAL "$PID" 2>/dev/null; then
+            notify "✓ Sent $SIGNAME to $PNAME (PID: $PID)"
+        else
+            # Try with sudo
+            if pkexec kill $SIGNAL "$PID" 2>/dev/null; then
+                notify "✓ Sent $SIGNAME to $PNAME (PID: $PID) [sudo]"
+            else
+                notify "✗ Failed to send $SIGNAME to $PNAME (PID: $PID)"
+            fi
+        fi
+    fi
+done
