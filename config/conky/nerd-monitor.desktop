@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Nerd System Monitor (Conky)
+Comment=Conky widget for system monitoring
+Exec=sh -c "sleep 3 && conky -c ~/.config/conky/nerd-monitor.conf"
+Terminal=false
+Hidden=false
+X-GNOME-Autostart-enabled=true
+X-GNOME-Autostart-Delay=3
+StartupNotify=false

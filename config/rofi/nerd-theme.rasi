@@ -13,7 +13,7 @@
 }
 
 window {
-    width:            500px;
+    width:            550px;
     border:           2px;
     border-color:     @accent;
     border-radius:    8px;
@@ -54,9 +54,9 @@ textbox {
 }
 
 listview {
-    lines:     15;
+    lines:     20;
     padding:   8px 0 0 0;
-    scrollbar: false;
+    scrollbar: true;
     spacing:   2px;
 }
 

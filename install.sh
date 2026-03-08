@@ -9,6 +9,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BIN_DIR="$HOME/.local/bin"
 CONKY_DIR="$HOME/.config/conky"
 ROFI_DIR="$HOME/.config/rofi"
+AUTOSTART_DIR="$HOME/.config/autostart"
 
 echo "⚡ Nerd System Monitor - Installer"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -22,7 +23,7 @@ echo "  ✓ Dependencies installed"
 
 # 2. Create directories
 echo "[2/5] Creating directories..."
-mkdir -p "$BIN_DIR" "$CONKY_DIR" "$ROFI_DIR"
+mkdir -p "$BIN_DIR" "$CONKY_DIR" "$ROFI_DIR" "$AUTOSTART_DIR"
 echo "  ✓ Directories created"
 
 # 3. Symlink scripts
@@ -36,7 +37,9 @@ done
 echo "[4/5] Linking configs..."
 ln -sf "$SCRIPT_DIR/config/conky/nerd-monitor.conf" "$CONKY_DIR/nerd-monitor.conf"
 ln -sf "$SCRIPT_DIR/config/rofi/nerd-theme.rasi" "$ROFI_DIR/nerd-theme.rasi"
+ln -sf "$SCRIPT_DIR/config/conky/nerd-monitor.desktop" "$AUTOSTART_DIR/nerd-monitor.desktop"
 echo "  ✓ Conky config linked"
+echo "  ✓ Conky autostart linked"
 echo "  ✓ Rofi theme linked"
 
 # 5. Setup keyboard shortcuts (GNOME)
@@ -45,8 +48,8 @@ if command -v gsettings &>/dev/null; then
     EXISTING=$(gsettings get org.gnome.settings-daemon.plugins.media-keys custom-keybindings 2>/dev/null || echo "@as []")
     
     SHORTCUTS=(
-        "nerd-station|Nerd Station|$BIN_DIR/nerd-station|<Super>n"
-        "nerd-process|Nerd Process Manager|$BIN_DIR/nerd-process-manager|<Super>k"
+        "nerd-station|Nerd Station|$BIN_DIR/nerd-station|<Ctrl><Alt>n"
+        "nerd-process|Nerd Process Manager|$BIN_DIR/nerd-process-manager|<Ctrl><Alt>k"
         "nerd-docker|Nerd Docker Manager|$BIN_DIR/nerd-docker-manager|<Ctrl><Alt>d"
         "nerd-service|Nerd Service Manager|$BIN_DIR/nerd-service-manager|<Ctrl><Alt>s"
     )
@@ -79,11 +82,18 @@ echo ""
 echo "  Start Conky widget:"
 echo "    conky -c ~/.config/conky/nerd-monitor.conf &"
 echo ""
-echo "  Shortcuts:"
-echo "    Super+N       → Nerd Station"
-echo "    Super+K       → Process Manager"  
+echo "  ⌨  Atalhos / Shortcuts:"
+echo "    Ctrl+Alt+N    → Nerd Station (menu principal)"
+echo "    Ctrl+Alt+K    → Process Manager"  
 echo "    Ctrl+Alt+D    → Docker Manager"
 echo "    Ctrl+Alt+S    → Service Manager"
+echo ""
+echo "  📋 Opções do menu:"
+echo "    Gerenciamento: Processos, Docker, Serviços"
+echo "    Abrir: btop, glances, nmon, Arquivos, Config, Terminal"
+echo "    Rede: Portas, Conexões, WiFi"
+echo "    Sistema: Cleanup, Bateria, Sensores, Disco, Pacotes, Info"
+echo "    Ajuda: ⌨ Atalhos do Teclado"
 echo ""
 echo "  Or run directly:"
 echo "    nerd-station"

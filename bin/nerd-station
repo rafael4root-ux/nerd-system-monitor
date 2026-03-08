@@ -2,7 +2,7 @@
 # ═══════════════════════════════════════════════
 # NERD STATION - Unified Control Panel
 # ═══════════════════════════════════════════════
-# Launch with: Super+N or nerd-station
+# Launch with: Ctrl+Alt+N or nerd-station
 # ═══════════════════════════════════════════════
 
 THEME="$HOME/.config/rofi/nerd-theme.rasi"
@@ -10,25 +10,35 @@ SCRIPTS_DIR="$HOME/.local/bin"
 
 # Quick system stats for header
 CPU=$(grep -o '[0-9]*\.[0-9]*' /proc/loadavg | head -1)
-MEM=$(free -h | awk '/Mem:/ {printf "%s/%s", $3, $2}')
+MEM=$(free -h | awk 'NR==2 {printf "%s/%s", $3, $2}')
 DOCKER_COUNT=$(docker ps -q 2>/dev/null | wc -l)
 SERVICES_RUNNING=$(systemctl list-units --type=service --state=running --no-legend 2>/dev/null | wc -l)
 
 SELECTED=$(echo -e "\
+━━━ GERENCIAMENTO ━━━━━━━━━━━━━━━━━━━━━
 ⚡ Process Manager        Kill/signal processes
 🐳 Docker Manager         Start/stop/restart containers  
 ⚙  Service Manager        Systemd services on/off
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+━━━ ABRIR ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🖥  btop                   Interactive system monitor
 📊 glances                 Web dashboard monitor
 📋 nmon                    Compact system monitor
+🗂  Gerenciador de Arquivos
+🔧 Configurações do Sistema
+💻 Terminal
+━━━ REDE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🌐 Network Ports           Show listening ports
 🔌 Active Connections       Show established connections
 📡 WiFi Networks           Scan WiFi networks
+━━━ SISTEMA ━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🧹 System Cleanup          APT clean + logs clean
 🔋 Battery Info            Detailed battery status
 🌡  Sensors                 Temperature sensors
-💾 Disk Usage              Largest directories" | rofi -dmenu \
+💾 Disk Usage              Largest directories
+📦 Gerenciador de Pacotes  (APT)
+🖥  Informações do Sistema
+━━━ AJUDA ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+⌨  Atalhos do Teclado" | rofi -dmenu \
     -theme "$THEME" \
     -p "⚡ NERD STATION" \
     -mesg "CPU: $CPU | RAM: $MEM | Docker: $DOCKER_COUNT | Services: $SERVICES_RUNNING" \
@@ -138,5 +148,129 @@ case "$SELECTED" in
             -p "💾 DISK" \
             -mesg "Largest directories in \$HOME" \
             -i
+        ;;
+    *"Gerenciador de Arquivos"*)
+        if command -v nautilus &>/dev/null; then
+            nautilus "$HOME" &
+        elif command -v thunar &>/dev/null; then
+            thunar "$HOME" &
+        elif command -v nemo &>/dev/null; then
+            nemo "$HOME" &
+        elif command -v dolphin &>/dev/null; then
+            dolphin "$HOME" &
+        else
+            notify-send "⚠ Nerd Station" "Nenhum gerenciador de arquivos encontrado" -t 3000
+        fi
+        ;;
+    *"Configurações do Sistema"*)
+        if command -v gnome-control-center &>/dev/null; then
+            gnome-control-center &
+        elif command -v xfce4-settings-manager &>/dev/null; then
+            xfce4-settings-manager &
+        elif command -v systemsettings5 &>/dev/null; then
+            systemsettings5 &
+        else
+            notify-send "⚠ Nerd Station" "Nenhum painel de configurações encontrado" -t 3000
+        fi
+        ;;
+    *"Terminal"*)
+        if command -v gnome-terminal &>/dev/null; then
+            gnome-terminal &
+        elif command -v xfce4-terminal &>/dev/null; then
+            xfce4-terminal &
+        elif command -v konsole &>/dev/null; then
+            konsole &
+        elif command -v xterm &>/dev/null; then
+            xterm &
+        fi
+        ;;
+    *"Gerenciador de Pacotes"*)
+        ACTIONS=$(echo -e "📋 Listar pacotes instalados\n🔄 Atualizar lista de pacotes\n⬆  Atualizar sistema (upgrade)\n🔍 Buscar pacote" | rofi -dmenu \
+            -theme "$THEME" \
+            -p "📦 APT" \
+            -mesg "Gerenciador de Pacotes (APT)" \
+            -i)
+        case "$ACTIONS" in
+            *"Listar"*)
+                PKGS=$(dpkg --get-selections | grep -v deinstall | awk '{print $1}' | head -100)
+                echo "$PKGS" | rofi -dmenu \
+                    -theme "$THEME" \
+                    -p "📋 PACOTES" \
+                    -mesg "Pacotes instalados (top 100)" \
+                    -i
+                ;;
+            *"Atualizar lista"*)
+                pkexec apt update 2>&1
+                notify-send "📦 APT" "Lista de pacotes atualizada" -t 3000
+                ;;
+            *"Atualizar sistema"*)
+                CONFIRM=$(echo -e "✓ SIM - Atualizar\n✗ NÃO - Cancelar" | rofi -dmenu \
+                    -theme "$THEME" \
+                    -p "⚠ CONFIRMAR" \
+                    -mesg "Executar apt upgrade?")
+                if [[ "$CONFIRM" == *"SIM"* ]]; then
+                    open_terminal "sudo apt upgrade -y"
+                fi
+                ;;
+            *"Buscar"*)
+                QUERY=$(echo "" | rofi -dmenu \
+                    -theme "$THEME" \
+                    -p "🔍 BUSCAR" \
+                    -mesg "Digite o nome do pacote")
+                if [[ -n "$QUERY" ]]; then
+                    RESULTS=$(apt-cache search "$QUERY" 2>/dev/null | head -30)
+                    echo "$RESULTS" | rofi -dmenu \
+                        -theme "$THEME" \
+                        -p "📦 RESULTADOS" \
+                        -mesg "Pacotes encontrados para: $QUERY" \
+                        -i
+                fi
+                ;;
+        esac
+        ;;
+    *"Informações do Sistema"*)
+        SYS_INFO=$(echo -e "\
+Host:      $(hostname)
+OS:        $(lsb_release -d 2>/dev/null | cut -f2 || cat /etc/os-release | grep PRETTY | cut -d'"' -f2)
+Kernel:    $(uname -r)
+Arch:      $(uname -m)
+Uptime:    $(uptime -p)
+CPU:       $(grep 'model name' /proc/cpuinfo | head -1 | cut -d: -f2 | xargs)
+Cores:     $(nproc)
+RAM Total: $(free -h | awk '/Mem:/ {print \$2}')
+RAM Usada: $(free -h | awk '/Mem:/ {print \$3}')
+Swap:      $(free -h | awk '/Swap:/ {print \$3\"/\"\$2}')
+Disco /:   $(df -h / | awk 'NR==2 {print \$3\"/\"\$2\" (\"\$5\")\"}')")
+        echo "$SYS_INFO" | rofi -dmenu \
+            -theme "$THEME" \
+            -p "🖥 INFO" \
+            -mesg "Informações do Sistema" \
+            -i
+        ;;
+    *"Atalhos do Teclado"*)
+        SHORTCUTS=$(echo -e "\
+⌨  ATALHOS DO TECLADO
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Ctrl + Alt + N     ⚡ Nerd Station (este menu)
+Ctrl + Alt + K     ⚡ Process Manager
+Ctrl + Alt + D     🐳 Docker Manager
+Ctrl + Alt + S     ⚙  Service Manager
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  DENTRO DO PROCESS MANAGER:
+Alt + K            ☠ SIGKILL rápido
+Alt + 9            ☠ SIGKILL rápido
+Alt + F            ☠ Force kill (com filhos)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  GERAL:
+Digite para filtrar opções no Rofi
+Esc                Fechar / Voltar")
+        echo "$SHORTCUTS" | rofi -dmenu \
+            -theme "$THEME" \
+            -p "⌨ ATALHOS" \
+            -mesg "Atalhos de teclado do Nerd Station" \
+            -i
+        ;;
+    *"━━━"*)
+        # Ignore separator lines
         ;;
 esac
