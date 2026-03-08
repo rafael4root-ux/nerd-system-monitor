@@ -4,14 +4,20 @@
 
 **Sistema de monitoramento e gerenciamento para Linux**
 
-![Conky Widget](assets/demo1.png)
-
 [![OS](https://img.shields.io/badge/OS-Pop!__OS%20%7C%20Ubuntu-48B9C7?style=flat-square&logo=pop!_os)](https://pop.system76.com/)
 [![DE](https://img.shields.io/badge/DE-GNOME-4A86CF?style=flat-square&logo=gnome&logoColor=white)](https://www.gnome.org/)
 [![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)](LICENSE)
 [![Shell](https://img.shields.io/badge/Shell-Bash-4EAA25?style=flat-square&logo=gnu-bash&logoColor=white)](#)
 
 Widget Conky no desktop + painéis interativos via Rofi para gerenciar processos, Docker e serviços systemd.
+
+<br>
+
+### 🎬 Demo
+
+<img src="assets/demo1.png" alt="Nerd System Monitor Demo" width="700">
+
+<sub>Widget Conky rodando no desktop — monitoramento de CPU, RAM, GPU, rede, Docker, processos e serviços em tempo real.</sub>
 
 </div>
 
@@ -22,7 +28,7 @@ Widget Conky no desktop + painéis interativos via Rofi para gerenciar processos
 - [Funcionalidades](#-funcionalidades)
 - [Dependências](#-dependências)
 - [Instalação](#-instalação)
-- [Atalhos de Teclado](#-atalhos-de-teclado)
+- [Atalhos de Teclado](#️-atalhos-de-teclado)
 - [Estrutura do Projeto](#-estrutura-do-projeto)
 - [Licença](#-licença)
 
